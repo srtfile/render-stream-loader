@@ -1,0 +1,2009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Stream Player</title>
+<link rel="preconnect" href="https://new.vidnest.fun">
+<link rel="preconnect" href="https://api.themoviedb.org">
+<link rel="preconnect" href="https://corsproxy.io">
+<link rel="preconnect" href="https://animeapi.my.id">
+<link rel="preconnect" href="https://vaplayer.ru">
+<link rel="preconnect" href="https://vidrock.ru">
+<link rel="preconnect" href="https://player.vidzee.wtf">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.7/hls.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js" defer></script>
+<style>
+:root {
+  --bg:#0a0a0f; --surface:#111118; --surface2:#18181f; --border:#1e1e2e;
+  --accent:#6c63ff; --accent2:#a78bfa; --text:#e2e8f0; --muted:#64748b;
+  --ok:#4ade80; --err:#f87171; --warn:#fb923c;
+  --tv:#f59e42; --rock:#38bdf8; --vidzee:#c084fc; --anime:#ff6b9d;
+  --vnapahe:#f472b6;
+  --mono:'JetBrains Mono','Fira Code',monospace;
+  --radius:10px;
+  --panel-h:48vh;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+  --safe-left:env(safe-area-inset-left,0px);
+  --safe-right:env(safe-area-inset-right,0px);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html{scroll-behavior:smooth;}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+  min-height:100vh;min-height:100dvh;
+  overscroll-behavior:none;
+}
+body::before{
+  content:'';position:fixed;inset:0;
+  background-image:
+    linear-gradient(rgba(108,99,255,.02) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(108,99,255,.02) 1px,transparent 1px);
+  background-size:40px 40px;pointer-events:none;z-index:0;
+}
+
+/* ── HEADER ─────────────────────────────────────────────────── */
+header{
+  position:sticky;top:0;z-index:100;
+  padding:10px 16px;padding-top:calc(10px + var(--safe-top));
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  background:rgba(10,10,15,.92);backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+}
+.logo-dot{
+  width:28px;height:28px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,#6c63ff,#a78bfa);
+  display:flex;align-items:center;justify-content:center;font-size:12px;
+}
+header h1{font-size:.95rem;font-weight:700;letter-spacing:.3px;color:var(--accent2);}
+#hdr-status{font-size:.68rem;color:var(--muted);margin-left:auto;}
+#hdr-speed{font-size:.62rem;color:var(--ok);font-family:var(--mono);margin-left:4px;display:none;}
+#anime-badge{
+  display:none;font-size:.62rem;font-weight:700;padding:3px 9px;border-radius:20px;
+  background:rgba(255,107,157,.15);color:var(--anime);border:1px solid rgba(255,107,157,.3);
+}
+#anime-badge.visible{display:inline-flex;align-items:center;gap:4px;}
+
+/* ── LAYOUT ─────────────────────────────────────────────────── */
+.wrap{
+  position:relative;z-index:1;
+  display:grid;grid-template-columns:1fr 370px;
+  height:calc(100dvh - 51px);
+  padding-left:var(--safe-left);padding-right:var(--safe-right);
+}
+
+/* ── PLAYER SIDE ─────────────────────────────────────────────── */
+.player-side{
+  display:flex;flex-direction:column;padding:12px;gap:8px;overflow-y:auto;
+  scrollbar-width:thin;scrollbar-color:var(--border) transparent;
+}
+
+/* URL bar */
+.url-bar{display:flex;gap:6px;}
+.url-bar input{
+  flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);
+  padding:10px 12px;border-radius:8px;font-size:.8rem;font-family:var(--mono);outline:none;
+  min-width:0;transition:border-color .15s;
+}
+.url-bar input:focus{border-color:var(--accent);}
+.url-bar select{
+  background:var(--surface);border:1px solid var(--border);color:var(--text);
+  padding:10px 7px;border-radius:8px;font-size:.76rem;outline:none;cursor:pointer;
+  flex-shrink:0;
+}
+.url-bar button{
+  background:var(--accent);color:#fff;border:none;border-radius:8px;
+  padding:10px 16px;font-size:.8rem;font-weight:600;cursor:pointer;
+  white-space:nowrap;flex-shrink:0;min-height:44px;transition:opacity .15s;
+}
+.url-bar button:hover{opacity:.88;}
+.url-bar button:active{opacity:.7;}
+
+/* Adv headers */
+.adv-toggle{
+  font-size:.68rem;color:var(--muted);cursor:pointer;user-select:none;
+  display:flex;align-items:center;gap:4px;width:fit-content;padding:2px 0;
+}
+.adv-toggle:hover{color:var(--accent2);}
+.adv-toggle .arr{transition:transform .2s;display:inline-block;}
+.adv-toggle.open .arr{transform:rotate(90deg);}
+.adv-section{
+  display:none;background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;padding:10px 12px;flex-direction:column;gap:7px;
+}
+.adv-section.visible{display:flex;}
+.adv-row{display:flex;align-items:center;gap:8px;}
+.adv-row label{font-size:.68rem;color:var(--muted);width:52px;flex-shrink:0;}
+.adv-row input{
+  flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:6px 9px;border-radius:6px;font-size:.74rem;font-family:var(--mono);outline:none;
+}
+.adv-row input:focus{border-color:var(--accent);}
+.adv-note{font-size:.63rem;color:var(--muted);}
+
+/* Media wrap */
+.media-wrap{
+  position:relative;background:#000;border-radius:var(--radius);overflow:hidden;
+  aspect-ratio:16/9;width:100%;flex-shrink:0;
+  /* GPU compositing layer */
+  will-change:transform;transform:translateZ(0);
+}
+video{width:100%;height:100%;display:block;background:#000;}
+#iframe-player{width:100%;height:100%;border:none;display:none;background:#000;}
+.video-overlay{
+  position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:10px;pointer-events:none;
+  background:rgba(0,0,0,.6);transition:opacity .2s;
+}
+.video-overlay.hidden{opacity:0;pointer-events:none;}
+.spinner{
+  width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);
+  border-radius:50%;animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.overlay-msg{font-size:.76rem;color:var(--muted);text-align:center;padding:0 16px;}
+
+/* Player title */
+.player-title{
+  font-size:.85rem;font-weight:700;color:var(--text);
+  display:none;align-items:center;gap:8px;flex-wrap:wrap;
+}
+.pt-show{color:var(--accent2);}
+.pt-ep{color:var(--muted);font-weight:600;font-size:.76rem;}
+.pt-eptitle{color:var(--text);font-weight:500;font-size:.76rem;opacity:.85;}
+
+/* Status bar */
+.status-bar{font-size:.68rem;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:3px;flex-shrink:0;}
+.dot.ok{background:var(--ok);}.dot.err{background:var(--err);}.dot.warn{background:var(--warn);}
+.mbadge{font-size:.58rem;font-weight:700;border-radius:4px;padding:2px 6px;}
+.mb-hls{background:#2a1f0a;color:var(--warn);}
+.mb-mp4{background:#0a2a14;color:var(--ok);}
+.mb-embed{background:#0a1f2a;color:#38bdf8;}
+.mb-txt{background:#1a1535;color:var(--accent2);}
+.mb-dash{background:#1a0a2a;color:#c084fc;}
+.mb-playlist{background:#1a1535;color:var(--accent2);}
+
+/* Swipe hint (mobile) */
+.swipe-hint{
+  display:none;font-size:.64rem;color:var(--muted);text-align:center;padding:2px 0;
+  opacity:.7;
+}
+
+/* ── INFO BARS ───────────────────────────────────────────────── */
+.anime-info-bar{
+  display:none;background:rgba(255,107,157,.07);border:1px solid rgba(255,107,157,.2);
+  border-radius:8px;padding:7px 12px;font-size:.68rem;gap:5px;flex-direction:column;
+}
+.anime-info-bar.visible{display:flex;}
+.anime-info-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.anime-mal-id{font-family:var(--mono);font-size:.66rem;color:var(--anime);font-weight:700;}
+.anime-tried-types{font-size:.6rem;color:var(--muted);font-family:var(--mono);}
+.anime-warn{color:var(--warn);font-size:.64rem;}
+
+.vnapahe-info-bar{
+  display:none;background:rgba(244,114,182,.07);border:1px solid rgba(244,114,182,.25);
+  border-radius:8px;padding:7px 12px;font-size:.68rem;gap:5px;flex-direction:column;
+}
+.vnapahe-info-bar.visible{display:flex;}
+.vnapahe-info-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.vnapahe-mal-id{font-family:var(--mono);font-size:.66rem;color:var(--vnapahe);font-weight:700;}
+.vnapahe-warn{color:var(--warn);font-size:.64rem;}
+
+/* ── EP NAV ──────────────────────────────────────────────────── */
+.ep-nav{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:9px 10px;display:flex;flex-direction:column;gap:6px;
+}
+.ep-nav-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.ep-nav-controls{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.ep-nav-btn{
+  background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  padding:8px 14px;border-radius:8px;font-size:.74rem;font-weight:600;cursor:pointer;
+  white-space:nowrap;min-height:44px;transition:all .12s;
+}
+.ep-nav-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent2);}
+.ep-nav-btn:active:not(:disabled){opacity:.7;}
+.ep-nav-btn:disabled{opacity:.35;cursor:not-allowed;}
+.ep-autonext{display:flex;align-items:center;gap:5px;font-size:.66rem;color:var(--muted);cursor:pointer;user-select:none;}
+.ep-autonext input{accent-color:var(--accent);cursor:pointer;width:16px;height:16px;}
+.ep-nav-title{font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;}
+.ep-nav-current{font-size:.76rem;font-weight:700;color:var(--accent2);}
+.ep-nav-seasons{display:flex;gap:5px;flex-wrap:wrap;}
+.ep-season-tab{
+  background:var(--surface2);border:1px solid var(--border);color:var(--muted);
+  padding:5px 10px;border-radius:20px;font-size:.64rem;font-weight:700;
+  cursor:pointer;white-space:nowrap;min-height:32px;transition:all .12s;
+}
+.ep-season-tab:hover{color:var(--text);border-color:var(--accent);}
+.ep-season-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.ep-strip-scroll{display:flex;gap:5px;overflow-x:auto;padding-bottom:3px;scrollbar-width:none;}
+.ep-strip-scroll::-webkit-scrollbar{display:none;}
+.ep-chip{
+  flex-shrink:0;min-width:36px;height:36px;padding:0 8px;border-radius:8px;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  font-size:.72rem;font-weight:700;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .12s;
+  contain:layout style;
+}
+.ep-chip:hover{border-color:var(--accent);color:var(--accent2);}
+.ep-chip.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.ep-chip.loading{opacity:.5;cursor:wait;}
+.ep-nav-loading{font-size:.66rem;color:var(--muted);padding:2px 0;}
+
+/* ── SOURCE PANEL ────────────────────────────────────────────── */
+.source-panel{
+  border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;
+}
+
+.panel-head{
+  padding:9px 12px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex-shrink:0;
+}
+.panel-head h2{font-size:.78rem;font-weight:700;}
+.ph-cnt{background:var(--accent);color:#fff;font-size:.58rem;font-weight:700;border-radius:20px;padding:2px 8px;}
+
+.fetch-bar{display:flex;gap:5px;flex:1;min-width:0;}
+.fetch-bar input{
+  width:90px;background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:7px 9px;border-radius:7px;font-size:.76rem;font-family:var(--mono);outline:none;flex-shrink:0;
+}
+.fetch-bar input:focus{border-color:var(--accent);}
+.fetch-bar select{
+  background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:7px 5px;border-radius:7px;font-size:.72rem;outline:none;flex-shrink:0;
+}
+.fetch-bar button{
+  border:none;border-radius:7px;padding:7px 11px;font-size:.72rem;font-weight:700;
+  cursor:pointer;color:#fff;background:var(--accent);white-space:nowrap;flex-shrink:0;
+  min-height:36px;transition:opacity .15s;
+}
+.fetch-bar button:hover{opacity:.88;}
+.fetch-bar button:disabled{opacity:.4;cursor:not-allowed;}
+
+/* EP strip (right panel) */
+.ep-strip{
+  display:none;padding:6px 12px;border-bottom:1px solid var(--border);
+  gap:5px;flex-shrink:0;flex-direction:column;
+}
+.ep-strip.visible{display:flex;}
+.ep-mode-tabs{display:flex;gap:0;border-radius:7px;overflow:hidden;border:1px solid var(--border);width:fit-content;}
+.ep-mode-tab{
+  padding:5px 12px;font-size:.66rem;font-weight:600;cursor:pointer;
+  color:var(--muted);background:var(--bg);border:none;transition:all .12s;
+}
+.ep-mode-tab.active{background:var(--accent);color:#fff;}
+.ep-mode-tab:hover:not(.active){color:var(--text);}
+.ep-manual-row{display:flex;gap:5px;}
+.ep-manual-row input{
+  flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);
+  padding:6px 8px;border-radius:6px;font-size:.74rem;outline:none;
+}
+.ep-manual-row input:focus{border-color:var(--accent);}
+.ep-abs-row{display:flex;gap:5px;align-items:center;}
+.ep-abs-row input{
+  flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);
+  padding:6px 8px;border-radius:6px;font-size:.74rem;outline:none;
+}
+.ep-abs-row input:focus{border-color:var(--accent);}
+.ep-abs-row button{
+  background:var(--surface2);border:1px solid var(--border);color:var(--accent2);
+  padding:6px 9px;border-radius:6px;font-size:.68rem;font-weight:700;cursor:pointer;
+  white-space:nowrap;min-height:36px;
+}
+.ep-abs-row button:hover{border-color:var(--accent);color:var(--accent);}
+.ep-abs-row button:disabled{opacity:.4;cursor:not-allowed;}
+.ep-detect-result{font-size:.63rem;color:var(--ok);display:none;padding:2px 0;}
+.ep-detect-result.visible{display:block;}
+.ep-detect-err{font-size:.63rem;color:var(--err);display:none;padding:2px 0;}
+.ep-detect-err.visible{display:block;}
+
+/* Source chips */
+.src-chips{
+  display:flex;gap:4px;padding:6px 12px;border-bottom:1px solid var(--border);
+  flex-wrap:wrap;flex-shrink:0;
+}
+.src-chip{
+  font-size:.6rem;font-weight:700;padding:3px 7px;border-radius:20px;
+  border:1px solid var(--border);background:var(--surface2);color:var(--muted);
+  display:flex;align-items:center;gap:4px;contain:layout style;
+}
+.src-chip .chip-dot{width:5px;height:5px;border-radius:50%;background:var(--muted);flex-shrink:0;}
+.src-chip.pending .chip-dot{background:var(--warn);animation:blink .8s infinite alternate;}
+.src-chip.done    .chip-dot{background:var(--ok);}
+.src-chip.err     .chip-dot{background:var(--err);}
+.src-chip.skip    .chip-dot{background:var(--muted);}
+@keyframes blink{to{opacity:.3;}}
+
+/* Filter tabs */
+.filter-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;scrollbar-width:none;}
+.filter-tabs::-webkit-scrollbar{display:none;}
+.filter-tab{
+  padding:7px 10px;font-size:.62rem;font-weight:600;cursor:pointer;
+  color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap;
+  transition:all .12s;min-height:36px;display:flex;align-items:center;
+}
+.filter-tab:hover{color:var(--text);}
+.filter-tab.active{color:var(--accent2);border-bottom-color:var(--accent);}
+
+/* Stream list */
+.stream-list{
+  flex:1;overflow-y:auto;padding:6px 5px;display:flex;flex-direction:column;gap:3px;
+  scrollbar-width:thin;scrollbar-color:var(--border) transparent;
+  content-visibility:auto;
+}
+.stream-list:empty::after{
+  content:"No streams loaded.";display:block;text-align:center;
+  color:var(--muted);font-size:.72rem;padding:24px 0;
+}
+.server-group{margin-bottom:4px;}
+.server-label{
+  font-size:.6rem;font-weight:700;color:var(--muted);text-transform:uppercase;
+  letter-spacing:1px;padding:4px 7px 3px;display:flex;align-items:center;gap:5px;
+}
+.srv-badge{font-size:.55rem;padding:1px 5px;border-radius:3px;font-weight:700;}
+.srv-vn{background:rgba(108,99,255,.2);color:var(--accent2);}
+.srv-va{background:rgba(245,158,66,.15);color:var(--tv);}
+.srv-vr{background:rgba(56,189,248,.15);color:var(--rock);}
+.srv-vz{background:rgba(192,132,252,.15);color:var(--vidzee);}
+.srv-anime{background:rgba(255,107,157,.15);color:var(--anime);}
+.srv-vnapahe{background:rgba(244,114,182,.18);color:var(--vnapahe);}
+
+.stream-item{
+  display:flex;align-items:center;gap:5px;padding:7px;border-radius:7px;
+  cursor:pointer;border:1px solid transparent;transition:background .1s,border-color .1s;
+  contain:layout style;
+}
+.stream-item:hover{background:var(--surface);border-color:var(--border);}
+.stream-item.active{background:#1a1535;border-color:var(--accent);}
+.type-tag{font-size:.56rem;font-weight:700;border-radius:4px;padding:2px 5px;white-space:nowrap;flex-shrink:0;}
+.tag-hls{background:#2a1f0a;color:var(--warn);}
+.tag-mp4{background:#0a2a14;color:var(--ok);}
+.tag-dash{background:#1a0a2a;color:#c084fc;}
+.tag-txt{background:#1a1535;color:var(--accent2);}
+.tag-embed{background:#0a1f2a;color:#38bdf8;}
+.tag-playlist{background:#1a1535;color:var(--accent2);}
+.tag-mirror{background:var(--surface2);color:var(--muted);}
+.tag-rock{background:#0a1a24;color:var(--rock);}
+.tag-vidzee{background:#1a0a2a;color:var(--vidzee);}
+.tag-anime{background:rgba(255,107,157,.15);color:var(--anime);}
+.tag-vnapahe{background:rgba(244,114,182,.18);color:var(--vnapahe);}
+.stream-url-text{font-size:.6rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;}
+.stream-item.active .stream-url-text{color:var(--accent2);}
+.play-icon{flex-shrink:0;color:var(--accent);font-size:.7rem;opacity:0;}
+.stream-item:hover .play-icon,.stream-item.active .play-icon{opacity:1;}
+.copy-icon{flex-shrink:0;font-size:.62rem;color:var(--muted);opacity:0;cursor:pointer;padding:3px 5px;border-radius:3px;min-height:28px;display:flex;align-items:center;}
+.stream-item:hover .copy-icon{opacity:1;}
+.copy-icon:hover{color:var(--ok);}
+
+/* ── MOBILE BOTTOM SHEET ─────────────────────────────────────── */
+.sheet-drag-handle{display:none;}
+.sheet-backdrop{display:none;}
+
+/* ── SCROLLBAR STYLES ────────────────────────────────────────── */
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+/* ── MOBILE RESPONSIVE ───────────────────────────────────────── */
+@media(max-width:768px){
+  .wrap{
+    grid-template-columns:1fr;
+    grid-template-rows:1fr;
+    height:calc(100dvh - 51px);
+    position:relative;
+  }
+
+  .player-side{
+    padding:10px 10px;gap:8px;height:100%;
+    padding-bottom:calc(10px + var(--safe-bottom));
+  }
+
+  /* URL bar compact on mobile */
+  .url-bar{flex-wrap:wrap;}
+  .url-bar select{width:80px;}
+
+  .media-wrap{border-radius:8px;}
+
+  .swipe-hint{display:block;}
+
+  /* BOTTOM SHEET */
+  .source-panel{
+    position:fixed;left:0;right:0;bottom:0;z-index:200;
+    height:var(--panel-h);
+    border-left:none;border-top:1px solid var(--border);
+    border-radius:18px 18px 0 0;
+    background:var(--surface);
+    transform:translateY(calc(var(--panel-h) - 56px));
+    transition:transform .3s cubic-bezier(.32,.72,0,1);
+    will-change:transform;
+    padding-bottom:var(--safe-bottom);
+    box-shadow:0 -8px 32px rgba(0,0,0,.6);
+  }
+  .source-panel.sheet-open{
+    transform:translateY(0);
+  }
+
+  .sheet-drag-handle{
+    display:flex;justify-content:center;padding:10px 0 4px;cursor:grab;flex-shrink:0;
+  }
+  .sheet-drag-handle::before{
+    content:'';display:block;width:36px;height:4px;
+    border-radius:2px;background:var(--border);
+  }
+  .sheet-backdrop{
+    display:block;position:fixed;inset:0;z-index:199;
+    background:rgba(0,0,0,.5);opacity:0;pointer-events:none;
+    transition:opacity .3s;
+  }
+  .sheet-backdrop.visible{opacity:1;pointer-events:all;}
+
+  /* Panel head compact */
+  .panel-head{padding:6px 12px;gap:5px;}
+  .panel-head h2{font-size:.76rem;}
+  .fetch-bar input{width:80px;}
+
+  /* Extra bottom padding for player side so sheet doesn't cover */
+  .player-side{padding-bottom:calc(64px + var(--safe-bottom));}
+
+  /* Ep nav compact */
+  .ep-nav{padding:8px;}
+  .ep-nav-btn{padding:8px 12px;font-size:.7rem;}
+
+  /* Filter tabs scrollable */
+  .filter-tabs{overflow-x:auto;}
+  .filter-tab{padding:6px 9px;font-size:.6rem;}
+
+  /* Stream items bigger touch targets */
+  .stream-item{padding:9px 7px;}
+  .copy-icon{min-height:36px;padding:4px 6px;}
+}
+
+@media(max-width:480px){
+  .url-bar input{font-size:.74rem;}
+  .url-bar button{padding:10px 12px;font-size:.74rem;}
+  .ep-nav-btn{padding:7px 10px;font-size:.68rem;}
+  .fetch-bar input{width:70px;padding:7px 7px;font-size:.7rem;}
+}
+
+/* ── PERFORMANCE: GPU layers for animated elements ───────────── */
+.spinner,.src-chip.pending .chip-dot{will-change:transform,opacity;}
+.source-panel{will-change:transform;}
+.stream-item{will-change:background-color,border-color;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-dot">&#9654;</div>
+  <h1>Stream Player</h1>
+  <span id="anime-badge">&#127820; Anime</span>
+  <span id="hdr-status">idle</span>
+  <span id="hdr-speed"></span>
+</header>
+
+<!-- Sheet backdrop (mobile) -->
+<div class="sheet-backdrop" id="sheetBackdrop" onclick="closeSheet()"></div>
+
+<div class="wrap">
+  <!-- LEFT: Player -->
+  <div class="player-side">
+    <div class="url-bar">
+      <input id="manualUrl" placeholder="Paste m3u8 / mp4 / mpd / embed URL…" />
+      <select id="manualType" title="Force type">
+        <option value="auto">Auto</option>
+        <option value="hls">HLS</option>
+        <option value="mp4">MP4</option>
+        <option value="dash">DASH</option>
+        <option value="txt">TXT</option>
+        <option value="embed">Embed</option>
+      </select>
+      <button onclick="playManual()">&#9654; Play</button>
+    </div>
+
+    <div>
+      <div class="adv-toggle" id="advToggle" onclick="toggleAdv()">
+        <span class="arr">&#9654;</span> Advanced headers
+      </div>
+      <div class="adv-section" id="advSection">
+        <div class="adv-row">
+          <label>Referer</label>
+          <input id="adv-referer" type="url" placeholder="https://example.com/" />
+        </div>
+        <div class="adv-row">
+          <label>Origin</label>
+          <input id="adv-origin" type="url" placeholder="https://example.com" />
+        </div>
+        <div class="adv-note">Headers injected into HLS XHR requests.</div>
+      </div>
+    </div>
+
+    <div class="anime-info-bar" id="animeInfoBar">
+      <div class="anime-info-row">
+        <span style="color:var(--anime);font-weight:700;font-size:.7rem;">&#127820; Anime Detected</span>
+        <span style="color:var(--muted);font-size:.64rem;">MAL ID:</span>
+        <span class="anime-mal-id" id="animeMalId">—</span>
+        <span class="anime-tried-types" id="animeTriedTypes"></span>
+      </div>
+      <div class="anime-info-row" id="animeWarnRow" style="display:none;">
+        <span class="anime-warn" id="animeWarnText"></span>
+      </div>
+    </div>
+
+    <div class="vnapahe-info-bar" id="vnapaheInfoBar">
+      <div class="vnapahe-info-row">
+        <span style="color:var(--vnapahe);font-weight:700;font-size:.7rem;">&#127800; VidNestAnimePahe</span>
+        <span style="color:var(--muted);font-size:.64rem;">MAL ID:</span>
+        <span class="vnapahe-mal-id" id="vnapaheMalId">—</span>
+        <span style="font-size:.6rem;color:var(--muted);font-family:var(--mono);" id="vnapaheStatus"></span>
+      </div>
+      <div class="vnapahe-info-row" id="vnapaheWarnRow" style="display:none;">
+        <span class="vnapahe-warn" id="vnapaheWarnText"></span>
+      </div>
+    </div>
+
+    <div class="player-title" id="playerTitle"></div>
+
+    <div class="media-wrap" id="mediaWrap">
+      <video id="vid" controls playsinline></video>
+      <iframe id="iframe-player" allowfullscreen allow="autoplay; fullscreen; encrypted-media"></iframe>
+      <div class="video-overlay" id="overlay">
+        <div class="spinner" id="spinner" style="display:none"></div>
+        <div class="overlay-msg" id="overlayMsg">Select a stream or paste a URL above</div>
+      </div>
+    </div>
+
+    <div class="status-bar" id="statusBar">
+      <span><span class="dot warn"></span>No stream loaded</span>
+    </div>
+
+    <!-- Mobile: Open sources button -->
+    <button id="mobileSheetBtn" onclick="openSheet()" style="
+      display:none;background:var(--accent);color:#fff;border:none;border-radius:8px;
+      padding:10px;font-size:.78rem;font-weight:700;cursor:pointer;width:100%;min-height:44px;
+    ">&#9776; View Sources <span id="mobileBadge" style="background:rgba(255,255,255,.2);border-radius:10px;padding:1px 7px;font-size:.68rem;"></span></button>
+
+    <div class="ep-nav" id="epNav" style="display:none;">
+      <div class="ep-nav-head">
+        <span class="ep-nav-title">Episodes</span>
+        <span class="ep-nav-current" id="epNavCurrent">S1 · E1</span>
+      </div>
+      <div class="ep-nav-controls">
+        <button class="ep-nav-btn" id="epPrevBtn" onclick="navRelative(-1)">&#9664; Prev</button>
+        <label class="ep-autonext">
+          <input type="checkbox" id="autoNextToggle" checked/>
+          <span>Auto-next</span>
+        </label>
+        <button class="ep-nav-btn" id="epNextBtn" onclick="navRelative(1)">Next &#9654;</button>
+      </div>
+      <div class="ep-nav-seasons" id="epNavSeasons"></div>
+      <div class="ep-strip-scroll" id="epStrip"></div>
+      <div class="ep-nav-loading" id="epNavLoading" style="display:none;">Loading…</div>
+    </div>
+
+    <div class="swipe-hint" id="swipeHint">&#8592; swipe on player to change episode &#8594;</div>
+  </div>
+
+  <!-- RIGHT: Sources panel -->
+  <div class="source-panel" id="sourcePanel">
+    <!-- Mobile drag handle -->
+    <div class="sheet-drag-handle" id="dragHandle"></div>
+
+    <div class="panel-head">
+      <h2>Sources</h2>
+      <span class="ph-cnt" id="totalBadge">0</span>
+      <div class="fetch-bar">
+        <input id="g-tmdb" type="number" placeholder="TMDB ID" value="280" />
+        <select id="g-mtype">
+          <option value="movie">Movie</option>
+          <option value="tv">TV</option>
+        </select>
+        <button id="g-btn" onclick="fetchAll()">&#9889; Fetch</button>
+      </div>
+    </div>
+
+    <div class="ep-strip" id="ep-strip">
+      <div class="ep-mode-tabs">
+        <button class="ep-mode-tab active" id="tab-manual" onclick="setEpMode('manual')">S/Ep</button>
+        <button class="ep-mode-tab" id="tab-abs" onclick="setEpMode('abs')">Abs#</button>
+      </div>
+      <div id="ep-manual-block">
+        <div class="ep-manual-row">
+          <input id="g-season"  type="number" placeholder="Season"  value="1" min="1"/>
+          <input id="g-episode" type="number" placeholder="Episode" value="1" min="1"/>
+        </div>
+      </div>
+      <div id="ep-abs-block" style="display:none;">
+        <div class="ep-abs-row">
+          <input id="g-abs-ep" type="number" placeholder="Absolute ep# (e.g. 399)" min="1"/>
+          <button id="detect-btn" onclick="detectEpisode()">&#128269; Detect</button>
+        </div>
+        <div class="ep-detect-result" id="detect-result"></div>
+        <div class="ep-detect-err"   id="detect-err"></div>
+      </div>
+    </div>
+
+    <div class="src-chips">
+      <div class="src-chip" id="chip-vn"><span class="chip-dot"></span>VidNest</div>
+      <div class="src-chip" id="chip-va"><span class="chip-dot"></span>VAPlayer</div>
+      <div class="src-chip" id="chip-vr"><span class="chip-dot"></span>VidRock</div>
+      <div class="src-chip" id="chip-vz"><span class="chip-dot"></span>Vidzee</div>
+      <div class="src-chip" id="chip-vnapahe"><span class="chip-dot"></span>&#127800; VNAnimePahe</div>
+      <div class="src-chip" id="chip-anime"><span class="chip-dot"></span>&#127820; Anime</div>
+    </div>
+
+    <div class="filter-tabs" id="filterTabs">
+      <div class="filter-tab active" data-src="all"              onclick="filterBy(this)">All</div>
+      <div class="filter-tab"        data-src="vidnest"          onclick="filterBy(this)">&#9889; VN</div>
+      <div class="filter-tab"        data-src="vaplayer"         onclick="filterBy(this)">&#127916; VA</div>
+      <div class="filter-tab"        data-src="vidrock"          onclick="filterBy(this)">&#129395; VR</div>
+      <div class="filter-tab"        data-src="vidzee"           onclick="filterBy(this)">&#128302; Vidzee</div>
+      <div class="filter-tab"        data-src="vidnestanimepahe" onclick="filterBy(this)">&#127800; VNA</div>
+      <div class="filter-tab"        data-src="anime"            onclick="filterBy(this)">&#127820; Anime</div>
+    </div>
+
+    <div class="stream-list" id="streamList"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ─────────────────────────────────────────────────────────────────
+   CONSTANTS
+───────────────────────────────────────────────────────────────── */
+const TMDB_API_KEY   = '6fad3f86b8452ee232deb7977d7dcf58';
+const TMDB_BASE      = 'https://api.themoviedb.org/3';
+const ANIME_GENRE_ID = 16;
+const ANIMEAPI_BASE  = 'https://animeapi.my.id/themoviedb';
+const VNA_API_BASE   = 'https://new.vidnest.fun/hianime/anime';
+const VNA_REFERER    = 'https://vidnest.fun/';
+const VNA_HLS_HDR    = encodeURIComponent(JSON.stringify({
+  'origin':'https://megaplay.buzz','referer':'https://megaplay.buzz/',
+  'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+}));
+const VNA_ALPHABET = 'RB0fpH8ZEyVLkv7c2i6MAJ5u3IKFDxlS1NTsnGaqmXYdUrtzjwObCgQP94hoeW+/=';
+const ALPHA        = VNA_ALPHABET;
+const VR_KEY       = 'x7k9mPqT2rWvY8zA5bC3nF6hJ2lK4mN9';
+const VZ_SECRET    = 'c4a8f1d7e2b9a6c3d0f5e8a1b7c4d9e2';
+const VZ_PROXY     = 'https://vixsrcproxy2.khantara922.workers.dev/';
+const VA_API       = 'https://streamdata.vaplayer.ru/api.php';
+const VA_EMBED     = 'https://vaplayer.ru/embed';
+const VA_PROXY     = 'https://corsproxy.io/?url=';
+const VR_API       = 'https://vidrock.ru/api';
+const VR_EMBED     = 'https://vidrock.ru/embed';
+
+const VN_SERVERS = {
+  catflix:'movies4f',ophim:'klikxxi',alfa:'moviesapi',
+  beta:'purstream',lamda:'allmovies',prime:'catflix',
+  hexa:'vidlink',sigma:'hollymoviehd',gama:'flixhq',delta:'allmovies',
+};
+const VZ_SERVERS = [
+  {sr:'0',name:'Tcloud'},{sr:'1',name:'IpCloud'},{sr:'2',name:'Achilles'},
+  {sr:'3',name:'Nflix'},{sr:'4',name:'Drag'},{sr:'5',name:'Viet'},
+  {sr:'6',name:'Hindi'},{sr:'7',name:'Hindi_v2'},
+];
+const SUB_HOSTS = ['opensubtitles.org','opensubtitles.com','wyzie.io','vdrk.site'];
+const SUB_EXTS  = ['.vtt','.srt','.ass','.ssa'];
+
+/* ─────────────────────────────────────────────────────────────────
+   OPTIMIZED PROXY LISTS — Race all simultaneously
+───────────────────────────────────────────────────────────────── */
+const PROXY_LIST = [
+  { name:'corsproxy.io', wrap: u => 'https://corsproxy.io/?url=' + encodeURIComponent(u) },
+  { name:'allorigins',   wrap: u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u) },
+  { name:'codetabs',     wrap: u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u) },
+  { name:'thingproxy',   wrap: u => 'https://thingproxy.freeboard.io/fetch/' + u },
+];
+const VNA_PROXIES = [
+  { name:'animanga', fn: u => 'https://upcloud.animanga.fun/fetch?url=' + encodeURIComponent(u) + '&ref=' + encodeURIComponent(VNA_REFERER) },
+  { name:'worker',   fn: u => 'https://purple-meadow-7b37.vidnest-1.workers.dev/fetch?url=' + encodeURIComponent(u) + '&ref=' + encodeURIComponent(VNA_REFERER) },
+  { name:'corsproxy',fn: u => 'https://corsproxy.io/?url=' + encodeURIComponent(u) },
+  { name:'allorigins',fn:u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u) },
+];
+
+/* ─────────────────────────────────────────────────────────────────
+   STATE
+───────────────────────────────────────────────────────────────── */
+let hlsPlayer         = null;
+let activeItem        = null;
+let activeFilter      = 'all';
+let allStreams         = [];
+let epMode            = 'manual';
+let seasonEpCache     = {};
+let showNameCache     = {};
+let episodeTitleCache = {};
+let preferredStream   = null;
+let currentMediaType  = 'movie';
+let currentMalId      = null;
+let isAnimeContent    = false;
+let animeDetectCache  = {};
+let malIdCache        = {};
+let vnProxy           = null;
+let vzRuntimeKey      = null;
+let fetchAbortCtrl    = null;  // ← NEW: cancel in-flight fetches
+let epNavSelectedSeason = null;
+let epNavLoadToken    = 0;
+let domBatch          = [];    // ← NEW: batch DOM writes
+let batchFrame        = null;
+
+/* ─────────────────────────────────────────────────────────────────
+   PERF: Session storage cache for TMDB
+───────────────────────────────────────────────────────────────── */
+const SS = {
+  get(k) { try { const v = sessionStorage.getItem(k); return v ? JSON.parse(v) : null; } catch(e){ return null; } },
+  set(k,v) { try { sessionStorage.setItem(k, JSON.stringify(v)); } catch(e){} },
+};
+
+/* ─────────────────────────────────────────────────────────────────
+   PERF: Race proxies simultaneously — take first success
+   (was: sequential waterfall, now: Promise.any() race)
+───────────────────────────────────────────────────────────────── */
+async function raceProxies(proxies, url, validate, timeout = 12000) {
+  return Promise.any(
+    proxies.map(p => {
+      const proxyUrl = (p.wrap || p.fn)(url);
+      return fetch(proxyUrl, { signal: AbortSignal.timeout(timeout) })
+        .then(async r => {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const json = await r.json();
+          if (!validate(json)) throw new Error('invalid');
+          return { json, proxy: p.name };
+        });
+    })
+  ).catch(() => { throw new Error('All proxies failed for ' + url); });
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   PERF: Find VidNest proxy — race all simultaneously
+───────────────────────────────────────────────────────────────── */
+async function vnFindProxy() {
+  if (vnProxy) return true;
+  const testUrl = 'https://new.vidnest.fun/moviesapi/movie/254';
+  try {
+    const result = await raceProxies(
+      PROXY_LIST, testUrl,
+      json => !!(json && json.data), 8000
+    );
+    vnProxy = PROXY_LIST.find(p => p.name === result.proxy);
+    return true;
+  } catch(e) { return false; }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   PERF: Batched DOM rendering with requestAnimationFrame
+───────────────────────────────────────────────────────────────── */
+function scheduleRender() {
+  if (batchFrame) return;
+  batchFrame = requestAnimationFrame(() => {
+    batchFrame = null;
+    const items = domBatch.splice(0);
+    if (!items.length) return;
+    const frag = document.createDocumentFragment();
+    const groups = {};
+    items.forEach(s => {
+      const grpId = 'grp-' + s.source + '-' + s.server.replace(/[^a-z0-9]/gi, '_');
+      if (!groups[grpId]) {
+        let existing = document.getElementById(grpId);
+        if (!existing) {
+          existing = document.createElement('div');
+          existing.className = 'server-group';
+          existing.id = grpId;
+          const lbl = document.createElement('div');
+          lbl.className = 'server-label';
+          const bc = SRC_BADGE[s.source] || '';
+          const sn = SRC_NAME[s.source]  || s.source;
+          lbl.innerHTML = `<span class="srv-badge ${bc}">${esc(sn)}</span>${esc(s.server)}`;
+          existing.appendChild(lbl);
+          frag.appendChild(existing);
+        }
+        groups[grpId] = existing;
+      }
+      const item = buildStreamItem(s);
+      groups[grpId].appendChild(item);
+    });
+    document.getElementById('streamList').appendChild(frag);
+    document.getElementById('totalBadge').textContent = allStreams.length;
+    document.getElementById('mobileBadge').textContent = allStreams.length;
+  });
+}
+
+function buildStreamItem(s) {
+  const item = document.createElement('div');
+  item.className = 'stream-item';
+  item.dataset.source = s.source;
+  item.dataset.url    = s.url;
+  item.dataset.label  = s.label;
+  item.innerHTML =
+    `<span class="type-tag tag-${s.pill}">${esc(s.label)}</span>` +
+    `<span class="stream-url-text" title="${esc(s.url)}">${esc(s.url)}</span>` +
+    `<span class="copy-icon" title="Copy">⌘</span>` +
+    `<span class="play-icon">▶</span>`;
+  item.querySelector('.copy-icon').addEventListener('click', e => {
+    e.stopPropagation(); copyUrl(s.url, e.currentTarget);
+  });
+  item.addEventListener('click', () => playStream(s.url, s.type, item, s));
+  return item;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   MOBILE SHEET
+───────────────────────────────────────────────────────────────── */
+function isMobile() { return window.innerWidth <= 768; }
+
+function setupMobileSheet() {
+  const mobileBtn = document.getElementById('mobileSheetBtn');
+  mobileBtn.style.display = isMobile() ? 'block' : 'none';
+  setupSwipeGesture();
+  setupDragHandle();
+}
+
+function openSheet() {
+  document.getElementById('sourcePanel').classList.add('sheet-open');
+  document.getElementById('sheetBackdrop').classList.add('visible');
+  document.body.style.overflow = 'hidden';
+}
+function closeSheet() {
+  document.getElementById('sourcePanel').classList.remove('sheet-open');
+  document.getElementById('sheetBackdrop').classList.remove('visible');
+  document.body.style.overflow = '';
+}
+
+// Drag handle for bottom sheet
+function setupDragHandle() {
+  const handle = document.getElementById('dragHandle');
+  const panel  = document.getElementById('sourcePanel');
+  let startY = 0, startTransform = 0, dragging = false;
+
+  function onStart(e) {
+    if (!isMobile()) return;
+    dragging = true;
+    startY = (e.touches ? e.touches[0] : e).clientY;
+    panel.style.transition = 'none';
+  }
+  function onMove(e) {
+    if (!dragging || !isMobile()) return;
+    const dy = (e.touches ? e.touches[0] : e).clientY - startY;
+    const isOpen = panel.classList.contains('sheet-open');
+    const base = isOpen ? 0 : (window.innerHeight * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--panel-h')) / 100 - 56);
+    const newY = Math.max(0, base + dy);
+    panel.style.transform = `translateY(${newY}px)`;
+    if (e.cancelable) e.preventDefault();
+  }
+  function onEnd(e) {
+    if (!dragging || !isMobile()) return;
+    dragging = false;
+    panel.style.transition = '';
+    panel.style.transform  = '';
+    const dy = (e.changedTouches ? e.changedTouches[0] : e).clientY - startY;
+    if (dy < -40) openSheet();
+    else if (dy > 40) closeSheet();
+  }
+
+  handle.addEventListener('touchstart', onStart, { passive: true });
+  handle.addEventListener('touchmove',  onMove,  { passive: false });
+  handle.addEventListener('touchend',   onEnd,   { passive: true });
+}
+
+// Swipe left/right on video to navigate episodes
+function setupSwipeGesture() {
+  const wrap = document.getElementById('mediaWrap');
+  let sx = 0, sy = 0;
+  wrap.addEventListener('touchstart', e => {
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+  }, { passive: true });
+  wrap.addEventListener('touchend', e => {
+    if (currentMediaType !== 'tv') return;
+    const dx = e.changedTouches[0].clientX - sx;
+    const dy = e.changedTouches[0].clientY - sy;
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
+      navRelative(dx < 0 ? 1 : -1);
+    }
+  }, { passive: true });
+}
+
+window.addEventListener('resize', () => {
+  const mobileBtn = document.getElementById('mobileSheetBtn');
+  mobileBtn.style.display = isMobile() ? 'block' : 'none';
+  if (!isMobile()) closeSheet();
+});
+
+/* ─────────────────────────────────────────────────────────────────
+   TMDB — with session storage cache
+───────────────────────────────────────────────────────────────── */
+async function cachedTmdb(url, cacheKey) {
+  const cached = SS.get(cacheKey);
+  if (cached) return cached;
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error('TMDB HTTP ' + res.status);
+  const data = await res.json();
+  SS.set(cacheKey, data);
+  return data;
+}
+
+async function tmdbGetEpisodeTitle(tmdbId, season, episode) {
+  const k = `ep_${tmdbId}_${season}_${episode}`;
+  if (episodeTitleCache[k]) return episodeTitleCache[k];
+  try {
+    const data = await cachedTmdb(
+      `${TMDB_BASE}/tv/${tmdbId}/season/${season}/episode/${episode}?api_key=${TMDB_API_KEY}`,
+      'tmdb_ep_' + k
+    );
+    const title = (data && data.name) || '';
+    episodeTitleCache[k] = title;
+    return title;
+  } catch(e) { return ''; }
+}
+
+async function tmdbGetAllSeasons(tmdbId) {
+  const data = await cachedTmdb(
+    `${TMDB_BASE}/tv/${tmdbId}?api_key=${TMDB_API_KEY}`,
+    'tmdb_show_' + tmdbId
+  );
+  if (data && data.name) showNameCache[tmdbId] = data.name;
+  return (data.seasons || [])
+    .filter(s => s.season_number > 0)
+    .sort((a, b) => a.season_number - b.season_number);
+}
+
+async function tmdbGetSeasonEpisodeCount(tmdbId, seasonNum) {
+  try {
+    const data = await cachedTmdb(
+      `${TMDB_BASE}/tv/${tmdbId}/season/${seasonNum}?api_key=${TMDB_API_KEY}`,
+      `tmdb_season_${tmdbId}_${seasonNum}`
+    );
+    return (data.episodes && data.episodes.length) || 0;
+  } catch(e) { return 0; }
+}
+
+async function resolveAbsoluteEpisode(tmdbId, absEp) {
+  absEp = parseInt(absEp, 10);
+  if (!absEp || absEp < 1) throw new Error('Invalid episode number');
+  const seasons = await tmdbGetAllSeasons(tmdbId);
+  if (!seasons.length) throw new Error('No seasons found');
+  let remaining = absEp;
+  for (const s of seasons) {
+    const count = await tmdbGetSeasonEpisodeCount(tmdbId, s.season_number) || s.episode_count || 0;
+    if (remaining <= count) return { season: s.season_number, episode: remaining };
+    remaining -= count;
+  }
+  throw new Error('Episode ' + absEp + ' exceeds total episodes');
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   ANIME DETECTION — with caching
+───────────────────────────────────────────────────────────────── */
+async function tmdbCheckIsAnime(tmdbId, mtype) {
+  const k = `genres_${tmdbId}_${mtype}`;
+  if (animeDetectCache[k] !== undefined) return animeDetectCache[k];
+  try {
+    const endpoint = mtype === 'movie' ? '/movie/' : '/tv/';
+    const data = await cachedTmdb(
+      `${TMDB_BASE}${endpoint}${tmdbId}?api_key=${TMDB_API_KEY}`,
+      `tmdb_info_${mtype}_${tmdbId}`
+    );
+    const isAnim = (data.genres || []).some(g => g.id === ANIME_GENRE_ID);
+    const title  = (data.title || data.name || '').trim();
+    if (title) showNameCache[tmdbId] = title;
+    animeDetectCache[k] = { isAnime: isAnim };
+    return animeDetectCache[k];
+  } catch(e) {
+    animeDetectCache[k] = { isAnime: false };
+    return animeDetectCache[k];
+  }
+}
+
+// CORS-safe fetch — race corsproxy + allorigins
+async function animeApiFetch(url) {
+  return raceProxies(
+    [
+      { name:'direct', fn: u => u },
+      { name:'cors',   fn: u => 'https://corsproxy.io/?url=' + encodeURIComponent(u) },
+      { name:'all',    fn: u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u) },
+    ],
+    url,
+    json => json && json.myanimelist !== undefined,
+    10000
+  ).then(r => r.json).catch(() => { throw new Error('animeapi failed'); });
+}
+
+async function fetchAnimeApiByType(tmdbId, apiType) {
+  const k = `malid_${tmdbId}_${apiType}`;
+  const cached = SS.get(k);
+  if (cached) return cached;
+  const data = await animeApiFetch(`${ANIMEAPI_BASE}/${apiType}/${tmdbId}`);
+  if (!data || data.myanimelist == null) return null;
+  const result = { malId: data.myanimelist, usedType: apiType };
+  SS.set(k, result);
+  return result;
+}
+
+async function findMalId(tmdbId, mtype) {
+  const k = `mal_${tmdbId}_${mtype}`;
+  if (malIdCache[k] !== undefined) return malIdCache[k];
+  const [a, b] = await Promise.all([
+    fetchAnimeApiByType(tmdbId, mtype === 'movie' ? 'movie' : 'tv').catch(() => null),
+    fetchAnimeApiByType(tmdbId, mtype === 'movie' ? 'tv' : 'movie').catch(() => null),
+  ]);
+  malIdCache[k] = a || b || null;
+  return malIdCache[k];
+}
+
+async function resolveAnime(tmdbId, mtype) {
+  currentMalId   = null;
+  isAnimeContent = false;
+  hideAnimeInfo();
+  const genreInfo = await tmdbCheckIsAnime(tmdbId, mtype);
+  if (!genreInfo || !genreInfo.isAnime) { setChip('anime', 'skip'); return null; }
+  setChip('anime', 'pending');
+  hdrStatus('detecting MAL ID…');
+  const malInfo = await findMalId(tmdbId, mtype);
+  if (!malInfo) {
+    setChip('anime', 'err');
+    showAnimeWarn('Animation detected but no MAL ID found');
+    return null;
+  }
+  currentMalId   = malInfo.malId;
+  isAnimeContent = true;
+  showAnimeInfo(malInfo);
+  setChip('anime', 'done');
+  return malInfo.malId;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   VNA DECRYPT & PROXY
+───────────────────────────────────────────────────────────────── */
+function vnaDecrypt(data) {
+  const lut = {};
+  for (let i = 0; i < VNA_ALPHABET.length; i++) lut[VNA_ALPHABET[i]] = i;
+  data = data.replace(/\s+/g, '');
+  const out = [];
+  for (let i = 0; i < data.length; i += 4) {
+    const chunk = (data.slice(i, i+4) + '====').slice(0,4);
+    const d = chunk.split('').map(c => (c in lut) ? lut[c] : 64);
+    out.push((d[0] << 2) | (d[1] >> 4));
+    if (d[2] !== 64) out.push(((d[1] & 15) << 4) | (d[2] >> 2));
+    if (d[3] !== 64) out.push(((d[2] & 3)  << 6) | d[3]);
+  }
+  return JSON.parse(new TextDecoder().decode(new Uint8Array(out)));
+}
+
+// ← OPTIMIZED: race all VNA proxies simultaneously
+async function vnaProxyFetch(apiUrl) {
+  return raceProxies(VNA_PROXIES, apiUrl, json => !!(json && json.data), 15000);
+}
+
+function vnaProxiedUrls(m3u8) {
+  return {
+    direct:   m3u8,
+    animanga: 'https://upcloud.animanga.fun/proxy?url=' + encodeURIComponent(m3u8) + '&headers=' + VNA_HLS_HDR,
+    worker:   'https://purple-meadow-7b37.vidnest-1.workers.dev/fetch?url=' + encodeURIComponent(m3u8) + '&ref=' + encodeURIComponent('https://megaplay.buzz/'),
+  };
+}
+
+async function vnaFetchLang(malId, episode, lang, sourceTag) {
+  const apiUrl = `${VNA_API_BASE}/${malId}/${episode}/${lang}`;
+  let result;
+  try { result = await vnaProxyFetch(apiUrl); } catch(ex) { return 0; }
+
+  let payload;
+  try { payload = vnaDecrypt(result.json.data); }
+  catch(ex) {
+    try { payload = typeof result.json.data === 'object' ? result.json.data : JSON.parse(result.json.data); }
+    catch(ex2) { return 0; }
+  }
+
+  const sources = payload.sources || [];
+  if (!sources.length) return 0;
+
+  const L = lang.toUpperCase();
+  const proxied = vnaProxiedUrls(sources[0].file);
+  pushStream({ source:sourceTag, server:`VidNestAnimePahe·${L}`, pill:'vnapahe', label:`AnimePahe ${L} Direct`,   url:proxied.direct,   type:'hls' });
+  pushStream({ source:sourceTag, server:`VidNestAnimePahe·${L}`, pill:'vnapahe', label:`AnimePahe ${L} Animanga`, url:proxied.animanga, type:'hls' });
+  pushStream({ source:sourceTag, server:`VidNestAnimePahe·${L}`, pill:'vnapahe', label:`AnimePahe ${L} Worker`,   url:proxied.worker,   type:'hls' });
+  let added = 3;
+  for (let q = 1; q < sources.length; q++) {
+    pushStream({ source:sourceTag, server:`VidNestAnimePahe·${L}`, pill:'vnapahe', label:`AnimePahe ${L} ${sources[q].label||'Q'+q}`, url:sources[q].file, type:'hls' });
+    added++;
+  }
+  return added;
+}
+
+async function fetchVidNestAnimePahe(tmdbId, mtype, episode) {
+  hideVnapaheInfo();
+  setChip('vnapahe', 'pending');
+  const ep = parseInt(episode, 10) || 1;
+  let malInfo = null;
+  try { malInfo = await findMalId(tmdbId, mtype); } catch(e) {}
+  if (!malInfo) { setChip('vnapahe', 'err'); showVnapaheWarn('No MAL ID — no VNA streams'); return; }
+  showVnapaheInfo(malInfo.malId, malInfo.usedType);
+  const [a, b] = await Promise.all([
+    vnaFetchLang(malInfo.malId, ep, 'dub', 'vidnestanimepahe').catch(() => 0),
+    vnaFetchLang(malInfo.malId, ep, 'sub', 'vidnestanimepahe').catch(() => 0),
+  ]);
+  setChip('vnapahe', (a+b) > 0 ? 'done' : 'err');
+  if (!(a+b)) showVnapaheWarn(`MAL ${malInfo.malId} — no streams for Ep ${ep}`);
+}
+
+async function addVidNestAnimeStreams(malId, episode) {
+  await Promise.all([
+    vnaFetchLang(malId, episode, 'dub', 'anime').catch(() => {}),
+    vnaFetchLang(malId, episode, 'sub', 'anime').catch(() => {}),
+  ]);
+}
+
+async function addAnimeStreams(malId, episode) {
+  const ep = parseInt(episode, 10) || 1;
+  pushStream({ source:'anime', server:'MegaPlay', pill:'anime', label:'MegaPlay Dub',
+    url:`https://srtfile.github.io/megaplay_buzz_iframe_player/mal/${malId}/${ep}/dub/`, type:'embed' });
+  pushStream({ source:'anime', server:'MegaPlay', pill:'anime', label:'MegaPlay Sub',
+    url:`https://srtfile.github.io/megaplay_buzz_iframe_player/mal/${malId}/${ep}/sub/`, type:'embed' });
+  pushStream({ source:'anime', server:'FlixLoud', pill:'anime', label:'FlixLoud',
+    url:`https://donkarboy.github.io/flixloud/${malId}/1/`, type:'embed' });
+  await addVidNestAnimeStreams(malId, ep);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   VIDNEST — parallel server fetches + race proxy selection
+───────────────────────────────────────────────────────────────── */
+function vnDecode(data) {
+  const val = {};
+  for (let i = 0; i < ALPHA.length; i++) val[ALPHA[i]] = i;
+  data = data.replace(/\s+/g, '');
+  const out = [];
+  for (let i = 0; i < data.length; i += 4) {
+    const chunk = (data.slice(i,i+4)+'====').slice(0,4);
+    const n = chunk.split('').map(c => val[c] !== undefined ? val[c] : 64);
+    out.push((n[0] << 2) | (n[1] >> 4));
+    if (n[2] !== 64) out.push(((n[1] & 15) << 4) | (n[2] >> 2));
+    if (n[3] !== 64) out.push(((n[2] & 3) << 6) | n[3]);
+  }
+  return JSON.parse(new TextDecoder().decode(new Uint8Array(out)));
+}
+function isSub(url) {
+  const u = url.toLowerCase();
+  return SUB_HOSTS.some(h => u.includes(h)) || SUB_EXTS.some(e => u.split('?')[0].endsWith(e));
+}
+function vnExtractUrls(obj, found = []) {
+  if (!obj || typeof obj !== 'object') return found;
+  if (Array.isArray(obj)) { obj.forEach(v => vnExtractUrls(v, found)); return found; }
+  for (const k in obj) {
+    const v = obj[k];
+    if ((k === 'url' || k === 'file') && typeof v === 'string' && v.startsWith('http')) {
+      if (!isSub(v)) found.push(vnTransform(v));
+    } else vnExtractUrls(v, found);
+  }
+  return found;
+}
+function vnTransform(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname === 'goodstream.cc') {
+      const s = u.pathname.split('/').filter(Boolean);
+      if ((s[0]==='streamsvr'||s[0]==='pl') && s[1])
+        return u.protocol+'//'+u.hostname+'/embed/'+s[1];
+    }
+  } catch(e) {}
+  return url;
+}
+async function vnFetchServer(backend, path) {
+  const r = await fetch(vnProxy.wrap('https://new.vidnest.fun/' + backend + '/' + path), { signal: AbortSignal.timeout(14000) });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const raw = await r.json();
+  if (!raw || !raw.data) throw new Error('no data');
+  return vnExtractUrls(vnDecode(raw.data));
+}
+async function fetchVidnest(tmdb, mtype, season, episode) {
+  const path = mtype === 'movie' ? 'movie/' + tmdb : `tv/${tmdb}/${season}/${episode}`;
+  try {
+    if (!vnProxy && !await vnFindProxy()) throw new Error('All proxies failed');
+    const jobs = Object.entries(VN_SERVERS).map(async ([name, backend]) => {
+      try { const urls = await vnFetchServer(backend, path); return { server: name, urls }; }
+      catch(e) { return null; }
+    });
+    const results = (await Promise.all(jobs)).filter(r => r && r.urls.length);
+    let added = 0;
+    results.forEach(res => {
+      res.urls.forEach(url => {
+        const t = detectType(url);
+        pushStream({ source:'vidnest', server:res.server, pill:t, label:t.toUpperCase(), url, type:t });
+        added++;
+      });
+    });
+    setChip('vn', added ? 'done' : 'err');
+  } catch(e) { console.warn('[VidNest]', e); setChip('vn', 'err'); }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   VAPLAYER
+───────────────────────────────────────────────────────────────── */
+function vaIsPlaylist(url) { return url.includes('/playlist/') || url.includes('list.m3u8'); }
+async function fetchVaplayer(tmdb, mtype, season, episode) {
+  try {
+    const apiUrl = mtype === 'movie'
+      ? `${VA_API}?tmdb=${tmdb}&type=movie`
+      : `${VA_API}?tmdb=${tmdb}&type=tv&season=${season}&episode=${episode}`;
+    const embedUrl = mtype === 'movie'
+      ? `${VA_EMBED}/movie/${tmdb}`
+      : `${VA_EMBED}/tv/${tmdb}/${season}/${episode}`;
+    const res = await fetch(VA_PROXY + encodeURIComponent(apiUrl), {
+      headers: { 'Referer':'https://vaplayer.ru/', 'Origin':'https://vaplayer.ru', 'Accept':'application/json,*/*' },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    if (json.status_code !== '200') throw new Error('API error');
+    pushStream({ source:'vaplayer', server:'VAPlayer', pill:'embed', label:'Embed', url:embedUrl, type:'embed' });
+    const raw = (json.data && json.data.stream_urls) || [];
+    let mc = 0;
+    raw.forEach(url => {
+      if (vaIsPlaylist(url)) pushStream({ source:'vaplayer', server:'VAPlayer', pill:'playlist', label:'Playlist', url, type:'hls' });
+      else { mc++; pushStream({ source:'vaplayer', server:'VAPlayer', pill:'mirror', label:'Mirror ' + mc, url, type:'hls' }); }
+    });
+    if (json.thumbnails_url) pushStream({ source:'vaplayer', server:'VAPlayer', pill:'txt', label:'VTT', url:json.thumbnails_url, type:'txt' });
+    setChip('va', 'done');
+  } catch(e) { console.warn('[VAPlayer]', e); setChip('va', 'err'); }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   VIDROCK
+───────────────────────────────────────────────────────────────── */
+async function vrAesEncrypt(plain) {
+  const keyBytes = new TextEncoder().encode(VR_KEY);
+  const iv = keyBytes.slice(0, 16);
+  const pb = new TextEncoder().encode(plain);
+  const padLen = 16 - (pb.length % 16);
+  const padded = new Uint8Array(pb.length + padLen);
+  padded.set(pb); padded.fill(padLen, pb.length);
+  const key = await crypto.subtle.importKey('raw', keyBytes, { name:'AES-CBC' }, false, ['encrypt']);
+  const enc = await crypto.subtle.encrypt({ name:'AES-CBC', iv }, key, padded);
+  return btoa(String.fromCharCode(...new Uint8Array(enc)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+async function fetchVidrock(tmdb, mtype, season, episode) {
+  try {
+    const plain    = mtype === 'tv' ? `${tmdb}_${season}_${episode}` : tmdb;
+    const token    = await vrAesEncrypt(plain);
+    const embedUrl = mtype === 'movie' ? `${VR_EMBED}/movie/${tmdb}` : `${VR_EMBED}/tv/${tmdb}/${season}/${episode}`;
+    const res = await fetch(`${VR_API}/${mtype}/${token}`, {
+      headers: { 'Referer':embedUrl, 'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const streams = Object.entries(data).filter(([,v]) => v && v.url);
+    if (!streams.length) throw new Error('No streams');
+    pushStream({ source:'vidrock', server:'VidRock', pill:'embed', label:'Embed', url:embedUrl, type:'embed' });
+    streams.forEach(([k, v]) => {
+      const t = detectType(v.url);
+      pushStream({ source:'vidrock', server:'VidRock', pill:'rock', label:k, url:v.url, type:t });
+    });
+    setChip('vr', 'done');
+  } catch(e) { console.warn('[VidRock]', e); setChip('vr', 'err'); }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   VIDZEE
+───────────────────────────────────────────────────────────────── */
+async function vzProxyFetch(url) {
+  const r = await fetch(`${VZ_PROXY}?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(15000) });
+  if (!r.ok) throw new Error('proxy ' + r.status);
+  return r.text();
+}
+async function vzDecryptApiKey(b64) {
+  const raw = Uint8Array.from(atob(b64.trim()), c => c.charCodeAt(0));
+  const nonce = raw.slice(0,12), tag = raw.slice(12,28), cipher = raw.slice(28);
+  const ctWithTag = new Uint8Array(cipher.length + tag.length);
+  ctWithTag.set(cipher); ctWithTag.set(tag, cipher.length);
+  const keyBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(VZ_SECRET));
+  const key    = await crypto.subtle.importKey('raw', keyBuf, { name:'AES-GCM' }, false, ['decrypt']);
+  const plain  = await crypto.subtle.decrypt({ name:'AES-GCM', iv:nonce }, key, ctWithTag);
+  return new TextDecoder().decode(plain);
+}
+function vzDecryptLink(encLink, rk) {
+  const decoded = atob(encLink);
+  const parts = decoded.split(':');
+  const keyBytes = rk.slice(0,32).padEnd(32,'\0');
+  const key = CryptoJS.enc.Utf8.parse(keyBytes);
+  const iv  = CryptoJS.enc.Base64.parse(parts[0]);
+  const ct  = CryptoJS.enc.Base64.parse(parts[1]);
+  const dec = CryptoJS.AES.decrypt({ ciphertext:ct }, key, { iv, mode:CryptoJS.mode.CBC, padding:CryptoJS.pad.Pkcs7 });
+  return dec.toString(CryptoJS.enc.Utf8);
+}
+async function fetchVidzee(tmdb, mtype, season, episode) {
+  try {
+    const embedUrl = `https://player.vidzee.wtf/embed/${mtype}/${tmdb}`;
+    if (!vzRuntimeKey) {
+      const raw = await vzProxyFetch('https://core.vidzee.wtf/api-key');
+      vzRuntimeKey = await vzDecryptApiKey(raw.replace(/\s+/g,''));
+    }
+    pushStream({ source:'vidzee', server:'Vidzee', pill:'embed', label:'Embed', url:embedUrl, type:'embed' });
+    const seen = new Set();
+    const jobs = VZ_SERVERS.map(async srv => {
+      let apiUrl = `https://player.vidzee.wtf/api/server?id=${encodeURIComponent(tmdb)}&sr=${srv.sr}`;
+      if (mtype === 'tv' && season && episode) apiUrl += `&ss=${season}&ep=${episode}`;
+      try {
+        const text = await vzProxyFetch(apiUrl);
+        const payload = JSON.parse(text);
+        if (payload && payload.error) return;
+        ((payload && payload.url) || []).forEach(item => {
+          const enc = item && item.link;
+          if (!enc) return;
+          try {
+            const dec = vzDecryptLink(enc, vzRuntimeKey);
+            if (!dec || seen.has(dec)) return;
+            seen.add(dec);
+            const t = detectType(dec);
+            pushStream({ source:'vidzee', server:`Vidzee·${srv.name}`, pill:'vidzee', label:srv.name, url:dec, type:t });
+          } catch(e) {}
+        });
+      } catch(e) {}
+    });
+    await Promise.all(jobs);
+    setChip('vz', 'done');
+  } catch(e) { console.warn('[Vidzee]', e); setChip('vz', 'err'); }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   FETCH ALL — with AbortController to cancel stale fetches
+───────────────────────────────────────────────────────────────── */
+async function fetchAll() {
+  // Cancel any in-flight fetch from previous call
+  if (fetchAbortCtrl) fetchAbortCtrl.abort();
+  fetchAbortCtrl = new AbortController();
+
+  const tmdb    = document.getElementById('g-tmdb').value.trim();
+  const mtype   = document.getElementById('g-mtype').value;
+  let   season  = document.getElementById('g-season').value  || '1';
+  let   episode = document.getElementById('g-episode').value || '1';
+  if (!tmdb) { hdrStatus('Enter a TMDB ID'); return; }
+
+  if (mtype === 'tv' && epMode === 'abs') {
+    const absEp = document.getElementById('g-abs-ep').value.trim();
+    if (absEp) {
+      document.getElementById('g-btn').disabled = true;
+      hdrStatus('detecting episode…');
+      try {
+        const result = await resolveAbsoluteEpisode(tmdb, absEp);
+        setEpMode('manual');
+        document.getElementById('g-season').value  = result.season;
+        document.getElementById('g-episode').value = result.episode;
+        season = String(result.season); episode = String(result.episode);
+        const resEl = document.getElementById('detect-result');
+        resEl.textContent = `✓ Ep ${absEp} → S${result.season} E${result.episode}`;
+        resEl.className   = 'ep-detect-result visible';
+      } catch(e) {
+        showDetectErr(e.message || 'Detection failed');
+        document.getElementById('g-btn').disabled = false;
+        return;
+      }
+    }
+  }
+
+  const t0 = performance.now();
+  clearAll();
+  document.getElementById('g-btn').disabled = true;
+  hdrStatus('fetching…');
+  ['vn','va','vr','vz','vnapahe','anime'].forEach(k => setChip(k,'pending'));
+
+  await updateEpNavVisibility();
+  updatePlayerTitle();
+  updateNavButtonStates();
+
+  const animePromise = resolveAnime(tmdb, mtype).then(malId => {
+    if (malId) {
+      const ep = mtype === 'tv' ? (document.getElementById('g-episode').value || '1') : '1';
+      return addAnimeStreams(malId, ep);
+    }
+  });
+
+  const vnaEp = mtype === 'tv' ? episode : '1';
+  const vnapahePromise = fetchVidNestAnimePahe(tmdb, mtype, vnaEp);
+
+  await Promise.all([
+    fetchVidnest (tmdb, mtype, season, episode),
+    fetchVaplayer(tmdb, mtype, season, episode),
+    fetchVidrock (tmdb, mtype, season, episode),
+    fetchVidzee  (tmdb, mtype, season, episode),
+    vnapahePromise,
+    animePromise,
+  ]);
+
+  // Flush remaining batch
+  scheduleRender();
+
+  const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+  const speedEl = document.getElementById('hdr-speed');
+  speedEl.textContent = `${elapsed}s`;
+  speedEl.style.display = 'inline';
+
+  document.getElementById('totalBadge').textContent = allStreams.length;
+  document.getElementById('mobileBadge').textContent = allStreams.length;
+  hdrStatus(allStreams.length ? allStreams.length + ' streams' : 'no results');
+  document.getElementById('g-btn').disabled = false;
+  if (mtype === 'tv') autoSelectPreferredStream();
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   STREAM LIST — batched DOM writes
+───────────────────────────────────────────────────────────────── */
+const SRC_BADGE = {
+  vidnest:'srv-vn', vaplayer:'srv-va', vidrock:'srv-vr',
+  vidzee:'srv-vz', vidnestanimepahe:'srv-vnapahe', anime:'srv-anime',
+};
+const SRC_NAME = {
+  vidnest:'VidNest', vaplayer:'VAPlayer', vidrock:'VidRock',
+  vidzee:'Vidzee', vidnestanimepahe:'VNAnimePahe', anime:'Anime',
+};
+
+function pushStream(s) {
+  allStreams.push(s);
+  if (activeFilter === 'all' || activeFilter === s.source) {
+    domBatch.push(s);
+    scheduleRender();
+  }
+}
+
+function clearAll() {
+  allStreams = [];
+  domBatch   = [];
+  if (batchFrame) { cancelAnimationFrame(batchFrame); batchFrame = null; }
+  document.getElementById('streamList').innerHTML = '';
+  document.getElementById('totalBadge').textContent  = '0';
+  document.getElementById('mobileBadge').textContent = '0';
+  ['vn','va','vr','vz','vnapahe','anime'].forEach(k => setChip(k,''));
+  hideVnapaheInfo();
+  const speedEl = document.getElementById('hdr-speed');
+  speedEl.style.display = 'none';
+  speedEl.textContent   = '';
+}
+
+function filterBy(tabEl) {
+  activeFilter = tabEl.dataset.src;
+  document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+  tabEl.classList.add('active');
+  document.getElementById('streamList').innerHTML = '';
+  const toShow = activeFilter === 'all' ? allStreams : allStreams.filter(s => s.source === activeFilter);
+  // Rebuild with fragment
+  const frag = document.createDocumentFragment();
+  const groups = {};
+  toShow.forEach(s => {
+    const grpId = 'grp-' + s.source + '-' + s.server.replace(/[^a-z0-9]/gi, '_');
+    if (!groups[grpId]) {
+      const g = document.createElement('div');
+      g.className = 'server-group'; g.id = grpId;
+      const lbl = document.createElement('div');
+      lbl.className = 'server-label';
+      lbl.innerHTML = `<span class="srv-badge ${SRC_BADGE[s.source]||''}">${esc(SRC_NAME[s.source]||s.source)}</span>${esc(s.server)}`;
+      g.appendChild(lbl);
+      frag.appendChild(g);
+      groups[grpId] = g;
+    }
+    groups[grpId].appendChild(buildStreamItem(s));
+  });
+  document.getElementById('streamList').appendChild(frag);
+  if (activeItem) {
+    const url = activeItem.dataset.url;
+    document.querySelectorAll('.stream-item').forEach(el => {
+      if (el.dataset.url === url) { el.classList.add('active'); activeItem = el; }
+    });
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   EPISODE NAV
+───────────────────────────────────────────────────────────────── */
+function setEpMode(mode) {
+  epMode = mode;
+  document.getElementById('tab-manual').classList.toggle('active', mode==='manual');
+  document.getElementById('tab-abs').classList.toggle('active',    mode==='abs');
+  document.getElementById('ep-manual-block').style.display = mode==='manual' ? '' : 'none';
+  document.getElementById('ep-abs-block').style.display    = mode==='abs'    ? '' : 'none';
+  clearDetectResult();
+}
+function setEpModeSilently(mode) {
+  epMode = mode;
+  document.getElementById('tab-manual').classList.toggle('active', mode==='manual');
+  document.getElementById('tab-abs').classList.toggle('active',    mode==='abs');
+  document.getElementById('ep-manual-block').style.display = mode==='manual' ? '' : 'none';
+  document.getElementById('ep-abs-block').style.display    = mode==='abs'    ? '' : 'none';
+}
+function clearDetectResult() {
+  const r = document.getElementById('detect-result');
+  const e = document.getElementById('detect-err');
+  r.className = 'ep-detect-result'; r.textContent = '';
+  e.className = 'ep-detect-err';    e.textContent = '';
+}
+function showDetectErr(msg) {
+  const el = document.getElementById('detect-err');
+  el.textContent = '✗ ' + msg; el.className = 'ep-detect-err visible';
+}
+async function detectEpisode() {
+  clearDetectResult();
+  const tmdb  = document.getElementById('g-tmdb').value.trim();
+  const absEp = document.getElementById('g-abs-ep').value.trim();
+  const btn   = document.getElementById('detect-btn');
+  if (!tmdb)  { showDetectErr('Enter a TMDB ID first'); return; }
+  if (!absEp) { showDetectErr('Enter an absolute episode number'); return; }
+  btn.disabled = true; btn.textContent = 'Detecting…';
+  try {
+    const result = await resolveAbsoluteEpisode(tmdb, absEp);
+    setEpMode('manual');
+    document.getElementById('g-season').value  = result.season;
+    document.getElementById('g-episode').value = result.episode;
+    const resEl = document.getElementById('detect-result');
+    resEl.textContent = `✓ Ep ${absEp} → S${result.season} E${result.episode}`;
+    resEl.className   = 'ep-detect-result visible';
+    hdrStatus(`detected S${result.season}E${result.episode}`);
+  } catch(e) { showDetectErr(e.message || 'Detection failed'); }
+  finally { btn.disabled = false; btn.textContent = '🔍 Detect'; }
+}
+
+function updateEpNavCurrentLabel() {
+  const s = document.getElementById('g-season').value  || '1';
+  const e = document.getElementById('g-episode').value || '1';
+  document.getElementById('epNavCurrent').textContent = `S${s} · E${e}`;
+  highlightActiveChip();
+}
+async function getSeasonEpisodeCounts(tmdbId) {
+  if (seasonEpCache[tmdbId]) return seasonEpCache[tmdbId];
+  const seasons = await tmdbGetAllSeasons(tmdbId);
+  const out = await Promise.all(seasons.map(async s => {
+    const count = await tmdbGetSeasonEpisodeCount(tmdbId, s.season_number) || s.episode_count || 0;
+    return { season_number: s.season_number, episode_count: count };
+  }));
+  seasonEpCache[tmdbId] = out;
+  return out;
+}
+async function buildEpisodeNav(preserve) {
+  const tmdb = document.getElementById('g-tmdb').value.trim();
+  const nav  = document.getElementById('epNav');
+  if (!tmdb) { nav.style.display = 'none'; return; }
+  const myToken = ++epNavLoadToken;
+  const loadingEl = document.getElementById('epNavLoading');
+  loadingEl.style.display = 'block'; loadingEl.textContent = 'Loading…';
+  document.getElementById('epStrip').innerHTML = '';
+  document.getElementById('epNavSeasons').innerHTML = '';
+  try {
+    const counts = await getSeasonEpisodeCounts(tmdb);
+    if (myToken !== epNavLoadToken) return;
+    if (!counts.length) { loadingEl.textContent = 'No episodes found.'; return; }
+    const curr = parseInt(document.getElementById('g-season').value, 10) || counts[0].season_number;
+    if (!preserve || !counts.some(s => s.season_number === epNavSelectedSeason)) epNavSelectedSeason = curr;
+    renderSeasonTabs(counts); renderEpisodeChips(counts);
+    loadingEl.style.display = 'none';
+    updateEpNavCurrentLabel();
+  } catch(e) {
+    if (myToken === epNavLoadToken) loadingEl.textContent = 'Failed: ' + (e.message || 'error');
+  }
+}
+function renderSeasonTabs(counts) {
+  const wrap = document.getElementById('epNavSeasons');
+  wrap.innerHTML = '';
+  if (counts.length <= 1) return;
+  counts.forEach(s => {
+    const tab = document.createElement('button');
+    tab.className = 'ep-season-tab' + (s.season_number === epNavSelectedSeason ? ' active' : '');
+    tab.textContent = 'S' + s.season_number;
+    tab.onclick = () => { epNavSelectedSeason = s.season_number; renderSeasonTabs(counts); renderEpisodeChips(counts); };
+    wrap.appendChild(tab);
+  });
+}
+function renderEpisodeChips(counts) {
+  const strip = document.getElementById('epStrip');
+  const frag  = document.createDocumentFragment();
+  const si    = counts.find(s => s.season_number === epNavSelectedSeason) || counts[0];
+  for (let ep = 1; ep <= (si.episode_count || 0); ep++) {
+    const chip = document.createElement('div');
+    chip.className  = 'ep-chip';
+    chip.textContent = ep;
+    chip.dataset.season  = si.season_number;
+    chip.dataset.episode = ep;
+    chip.onclick = () => jumpToEpisode(si.season_number, ep, chip);
+    frag.appendChild(chip);
+  }
+  strip.innerHTML = '';
+  strip.appendChild(frag);
+  highlightActiveChip();
+}
+function highlightActiveChip() {
+  const s = parseInt(document.getElementById('g-season').value, 10)  || 1;
+  const e = parseInt(document.getElementById('g-episode').value, 10) || 1;
+  document.querySelectorAll('.ep-chip').forEach(c => {
+    c.classList.toggle('active', parseInt(c.dataset.season,10)===s && parseInt(c.dataset.episode,10)===e);
+  });
+  const active = document.querySelector('.ep-chip.active');
+  if (active) active.scrollIntoView({ inline:'center', block:'nearest', behavior:'smooth' });
+}
+async function jumpToEpisode(season, episode, chipEl) {
+  document.querySelectorAll('.ep-chip').forEach(c => c.classList.remove('loading'));
+  if (chipEl) chipEl.classList.add('loading');
+  document.getElementById('g-season').value  = season;
+  document.getElementById('g-episode').value = episode;
+  setEpModeSilently('manual');
+  updateEpNavCurrentLabel();
+  await fetchAll();
+  autoSelectPreferredStream();
+  updateNavButtonStates();
+  if (chipEl) chipEl.classList.remove('loading');
+}
+async function navRelative(dir) {
+  const tmdb = document.getElementById('g-tmdb').value.trim();
+  if (!tmdb) return;
+  document.getElementById('epPrevBtn').disabled = true;
+  document.getElementById('epNextBtn').disabled = true;
+  try {
+    const counts  = await getSeasonEpisodeCounts(tmdb);
+    if (!counts.length) return;
+    let season  = parseInt(document.getElementById('g-season').value, 10)  || counts[0].season_number;
+    let episode = parseInt(document.getElementById('g-episode').value, 10) || 1;
+    let idx = counts.findIndex(s => s.season_number === season);
+    if (idx === -1) idx = 0;
+    let ns = season, ne = episode + dir;
+    if (ne < 1) {
+      if (idx > 0) { idx--; ns = counts[idx].season_number; ne = counts[idx].episode_count || 1; }
+      else ne = 1;
+    } else if (ne > (counts[idx].episode_count || 1)) {
+      if (idx < counts.length-1) { idx++; ns = counts[idx].season_number; ne = 1; }
+      else ne = counts[idx].episode_count || episode;
+    }
+    epNavSelectedSeason = ns;
+    renderSeasonTabs(counts); renderEpisodeChips(counts);
+    await jumpToEpisode(ns, ne, null);
+  } finally { updateNavButtonStates(); }
+}
+async function updateNavButtonStates() {
+  const tmdb = document.getElementById('g-tmdb').value.trim();
+  const prev = document.getElementById('epPrevBtn');
+  const next = document.getElementById('epNextBtn');
+  if (!tmdb || !seasonEpCache[tmdb]) { prev.disabled=false; next.disabled=false; return; }
+  const counts  = seasonEpCache[tmdb];
+  const season  = parseInt(document.getElementById('g-season').value, 10)  || counts[0].season_number;
+  const episode = parseInt(document.getElementById('g-episode').value, 10) || 1;
+  const idx = counts.findIndex(s => s.season_number === season);
+  prev.disabled = idx <= 0 && episode <= 1;
+  next.disabled = idx >= counts.length-1 && episode >= (counts[idx] ? counts[idx].episode_count : 1);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   PLAYER TITLE
+───────────────────────────────────────────────────────────────── */
+async function updatePlayerTitle() {
+  const titleEl = document.getElementById('playerTitle');
+  const mtype   = document.getElementById('g-mtype').value;
+  const tmdb    = document.getElementById('g-tmdb').value.trim();
+  if (mtype !== 'tv' || !tmdb) { titleEl.style.display = 'none'; return; }
+  const name    = showNameCache[tmdb] || 'TV Show';
+  const season  = document.getElementById('g-season').value  || '1';
+  const episode = document.getElementById('g-episode').value || '1';
+  titleEl.innerHTML = `<span class="pt-show">${esc(name)}</span><span class="pt-ep">S${esc(season)} · E${esc(episode)}</span>`;
+  titleEl.style.display = 'flex';
+  const epTitle = await tmdbGetEpisodeTitle(tmdb, season, episode);
+  if (epTitle) {
+    titleEl.innerHTML = `<span class="pt-show">${esc(name)}</span><span class="pt-ep">S${esc(season)} · E${esc(episode)}</span><span class="pt-eptitle"> — ${esc(epTitle)}</span>`;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   PREFERRED STREAM
+───────────────────────────────────────────────────────────────── */
+function rememberPreferredStream(s) { preferredStream = { source:s.source, server:s.server, label:s.label }; }
+function autoSelectPreferredStream() {
+  if (!preferredStream || !allStreams.length) return;
+  const p = preferredStream;
+  const match =
+    allStreams.find(s => s.source===p.source && s.server===p.server && s.label===p.label) ||
+    allStreams.find(s => s.source===p.source && s.server===p.server) ||
+    allStreams.find(s => s.source===p.source && s.label===p.label)   ||
+    allStreams.find(s => s.source===p.source);
+  if (!match) return;
+  let matchedEl = null;
+  document.querySelectorAll('.stream-item').forEach(el => { if (el.dataset.url===match.url) matchedEl=el; });
+  if (activeItem) activeItem.classList.remove('active');
+  activeItem = matchedEl;
+  if (matchedEl) matchedEl.classList.add('active');
+  document.getElementById('manualUrl').value = match.url;
+  loadMedia(match.url, match.type);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   MEDIA LOADING
+───────────────────────────────────────────────────────────────── */
+function detectType(url) {
+  const u = url.toLowerCase().split('?')[0];
+  if (u.endsWith('.mp4')||u.endsWith('.webm')||u.endsWith('.mkv')) return 'mp4';
+  if (u.endsWith('.mpd'))  return 'dash';
+  if (u.endsWith('.txt'))  return 'txt';
+  if (isEmbedUrl(url))     return 'embed';
+  return 'hls';
+}
+function isEmbedUrl(url) {
+  try {
+    const h = new URL(url).hostname;
+    const hosts = ['goodstream.cc','vidlink.pro','vidsrc.to','vidsrc.me','vidsrc.xyz',
+      'embed.su','multiembed.mov','2embed.cc','smashystream.com','moviesapi.club',
+      'vidfast.pro','vidnest.fun','warezcdn.link','frembed.hair','filemoon.sx',
+      'vaplayer.ru','vidrock.ru','vidzee.wtf','srtfile.github.io','donkarboy.github.io'];
+    if (hosts.some(e => h.includes(e))) return true;
+    if (new URL(url).pathname.includes('/embed/')) return true;
+    if (h.endsWith('.github.io')) return true;
+  } catch(e) {}
+  return false;
+}
+function getHeaders() {
+  return { referer: document.getElementById('adv-referer').value.trim(), origin: document.getElementById('adv-origin').value.trim() };
+}
+function playStream(url, type, itemEl, streamObj) {
+  if (activeItem) activeItem.classList.remove('active');
+  activeItem = itemEl; itemEl.classList.add('active');
+  document.getElementById('manualUrl').value = url;
+  if (streamObj && currentMediaType==='tv') rememberPreferredStream(streamObj);
+  loadMedia(url, type);
+  if (isMobile()) closeSheet();
+}
+function playManual() {
+  const url = document.getElementById('manualUrl').value.trim();
+  if (!url) return;
+  let type = document.getElementById('manualType').value;
+  if (type === 'auto') type = detectType(url);
+  if (activeItem) { activeItem.classList.remove('active'); activeItem = null; }
+  loadMedia(url, type);
+}
+async function loadMedia(url, type) {
+  showOverlay(true, 'Loading…');
+  setStatus('warn', 'Loading ' + type.toUpperCase() + '…', url);
+  destroyPlayer();
+  if (type==='txt')   { await loadTxt(url); return; }
+  if (type==='embed') { loadEmbed(url);     return; }
+  if (type==='mp4'||type==='webm') { loadNative(url, type); return; }
+  if (type==='dash')  { loadDash(url);      return; }
+  loadHls(url);
+}
+function destroyPlayer() {
+  if (hlsPlayer) { hlsPlayer.destroy(); hlsPlayer = null; }
+  const vid = document.getElementById('vid');
+  const ifr = document.getElementById('iframe-player');
+  vid.pause(); vid.removeAttribute('src'); vid.load();
+  vid.style.display='block'; ifr.style.display='none'; ifr.src='about:blank';
+}
+function loadHls(url) {
+  const vid = document.getElementById('vid');
+  const { referer, origin } = getHeaders();
+  if (typeof Hls === 'undefined') { setTimeout(() => loadHls(url), 200); return; }
+  if (Hls.isSupported()) {
+    const cfg = { enableWorker:true, lowLatencyMode:false };
+    if (referer || origin) {
+      cfg.xhrSetup = xhr => {
+        if (referer) try { xhr.setRequestHeader('Referer', referer); } catch(e) {}
+        if (origin)  try { xhr.setRequestHeader('Origin',  origin);  } catch(e) {}
+      };
+    }
+    hlsPlayer = new Hls(cfg);
+    hlsPlayer.loadSource(url);
+    hlsPlayer.attachMedia(vid);
+    hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
+      vid.play().catch(() => {}); showOverlay(false);
+      setStatus('ok', 'Playing HLS', url); setTypeBadge('hls');
+    });
+    hlsPlayer.on(Hls.Events.ERROR, (_, data) => {
+      if (data.fatal) { showOverlay(false); setStatus('err', 'HLS error: ' + data.details, url); }
+    });
+  } else if (vid.canPlayType('application/vnd.apple.mpegurl')) {
+    vid.src = url; vid.play().catch(() => {});
+    vid.oncanplay = () => { showOverlay(false); setStatus('ok', 'Playing HLS (native)', url); setTypeBadge('hls'); };
+    vid.onerror   = () => { showOverlay(false); setStatus('err', 'Playback error', url); };
+  } else { showOverlay(false); setStatus('err', 'HLS not supported', url); }
+}
+function loadNative(url, type) {
+  const vid = document.getElementById('vid');
+  const { referer, origin } = getHeaders();
+  if (referer || origin) {
+    const hdrs = {};
+    if (referer) hdrs['Referer'] = referer;
+    if (origin)  hdrs['Origin']  = origin;
+    fetch(url, { headers: hdrs })
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+      .then(blob => {
+        vid.src = URL.createObjectURL(blob); vid.play().catch(() => {});
+        vid.oncanplay = () => { showOverlay(false); setStatus('ok', 'Playing ' + type.toUpperCase(), url); setTypeBadge(type); };
+        vid.onerror   = () => { showOverlay(false); setStatus('err', 'Playback error', url); };
+      })
+      .catch(e => { showOverlay(false); setStatus('err', 'Fetch error: ' + e.message, url); });
+  } else {
+    vid.src = url; vid.play().catch(() => {});
+    vid.oncanplay = () => { showOverlay(false); setStatus('ok', 'Playing ' + type.toUpperCase(), url); setTypeBadge(type); };
+    vid.onerror   = () => { showOverlay(false); setStatus('err', 'Playback error', url); };
+  }
+}
+function loadDash(url) {
+  const vid = document.getElementById('vid');
+  vid.src = url; vid.play().catch(() => {});
+  vid.oncanplay = () => { showOverlay(false); setStatus('ok', 'Playing DASH', url); setTypeBadge('dash'); };
+  vid.onerror   = () => { showOverlay(false); setStatus('err', 'DASH error', url); };
+}
+function loadEmbed(url) {
+  const vid = document.getElementById('vid');
+  const ifr = document.getElementById('iframe-player');
+  vid.style.display='none'; ifr.style.display='block'; ifr.src = url;
+  ifr.onload = () => { showOverlay(false); setStatus('ok', 'Embed loaded', url); setTypeBadge('embed'); };
+  setTimeout(() => showOverlay(false), 4000);
+}
+async function loadTxt(url) {
+  try {
+    let text = null;
+    try { const r = await fetch(url, { signal:AbortSignal.timeout(10000) }); if (r.ok) text = await r.text(); } catch(e) {}
+    if (!text && vnProxy) {
+      try { const r2 = await fetch(vnProxy.wrap(url), { signal:AbortSignal.timeout(10000) }); if (r2.ok) text = await r2.text(); } catch(e) {}
+    }
+    if (!text) throw new Error('Could not fetch file');
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.startsWith('http'));
+    if (!lines.length) throw new Error('No URLs in file');
+    lines.forEach((line, i) => {
+      const t = detectType(line);
+      pushStream({ source:'txt', server:'TXT Playlist', pill:t, label:`#${i+1}`, url:line, type:t });
+    });
+    showOverlay(false); setStatus('ok', `TXT: ${lines.length} URL(s)`, url); setTypeBadge('txt');
+    loadMedia(lines[0], detectType(lines[0]));
+  } catch(e) { showOverlay(false); setStatus('err', 'TXT error: ' + e.message, url); }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   AUTO-NEXT
+───────────────────────────────────────────────────────────────── */
+document.getElementById('vid').addEventListener('ended', () => {
+  if (document.getElementById('autoNextToggle').checked && currentMediaType==='tv') navRelative(1);
+});
+
+/* ─────────────────────────────────────────────────────────────────
+   UI HELPERS
+───────────────────────────────────────────────────────────────── */
+function toggleAdv() {
+  document.getElementById('advToggle').classList.toggle('open');
+  document.getElementById('advSection').classList.toggle('visible');
+}
+function showOverlay(show, msg) {
+  document.getElementById('spinner').style.display = show ? 'block' : 'none';
+  document.getElementById('overlayMsg').textContent = msg || '';
+  document.getElementById('overlay').classList.toggle('hidden', !show);
+}
+function setStatus(type, label, url='') {
+  const cls   = type==='ok' ? 'ok' : type==='err' ? 'err' : 'warn';
+  const short = url.length>60 ? url.slice(0,57)+'…' : url;
+  document.getElementById('statusBar').innerHTML =
+    `<span><span class="dot ${cls}"></span>${esc(label)}</span>` +
+    (url ? `<span id="activeBadge"></span><span style="color:var(--muted);font-size:.64rem;word-break:break-all">${esc(short)}</span>` : '');
+}
+function setTypeBadge(type) {
+  const el = document.getElementById('activeBadge');
+  if (!el) return;
+  const m = { hls:'mb-hls', mp4:'mb-mp4', embed:'mb-embed', txt:'mb-txt', dash:'mb-dash', playlist:'mb-playlist' };
+  el.className = 'mbadge ' + (m[type]||'');
+  el.textContent = type.toUpperCase();
+}
+function setChip(key, state) {
+  const el = document.getElementById('chip-' + key);
+  if (el) el.className = 'src-chip ' + state;
+}
+function hdrStatus(msg) { document.getElementById('hdr-status').textContent = msg; }
+async function copyUrl(url, btn) {
+  try {
+    await navigator.clipboard.writeText(url);
+    const orig = btn.textContent;
+    btn.textContent = '✓'; btn.style.color = 'var(--ok)';
+    setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1500);
+  } catch(e) {}
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+/* Anime info bars */
+function showAnimeInfo(malInfo) {
+  document.getElementById('animeInfoBar').classList.add('visible');
+  document.getElementById('anime-badge').classList.add('visible');
+  document.getElementById('animeMalId').textContent      = malInfo.malId;
+  document.getElementById('animeTriedTypes').textContent = malInfo.usedType ? '[via ' + malInfo.usedType + ']' : '';
+  document.getElementById('animeWarnRow').style.display  = 'none';
+}
+function showAnimeWarn(msg) {
+  document.getElementById('animeInfoBar').classList.add('visible');
+  document.getElementById('animeWarnText').textContent  = '⚠ ' + msg;
+  document.getElementById('animeWarnRow').style.display = '';
+}
+function hideAnimeInfo() {
+  document.getElementById('animeInfoBar').classList.remove('visible');
+  document.getElementById('anime-badge').classList.remove('visible');
+  document.getElementById('animeMalId').textContent      = '—';
+  document.getElementById('animeTriedTypes').textContent = '';
+  document.getElementById('animeWarnRow').style.display  = 'none';
+}
+function showVnapaheInfo(malId, usedType) {
+  document.getElementById('vnapaheInfoBar').classList.add('visible');
+  document.getElementById('vnapaheMalId').textContent   = malId;
+  document.getElementById('vnapaheStatus').textContent  = usedType ? '[via ' + usedType + ']' : '';
+  document.getElementById('vnapaheWarnRow').style.display = 'none';
+}
+function showVnapaheWarn(msg) {
+  document.getElementById('vnapaheInfoBar').classList.add('visible');
+  document.getElementById('vnapaheWarnText').textContent  = '⚠ ' + msg;
+  document.getElementById('vnapaheWarnRow').style.display = '';
+}
+function hideVnapaheInfo() {
+  document.getElementById('vnapaheInfoBar').classList.remove('visible');
+  document.getElementById('vnapaheMalId').textContent      = '—';
+  document.getElementById('vnapaheStatus').textContent     = '';
+  document.getElementById('vnapaheWarnRow').style.display  = 'none';
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   EP NAV VISIBILITY + MTYPE CHANGE
+───────────────────────────────────────────────────────────────── */
+document.getElementById('g-season').addEventListener('change', () => buildEpisodeNav(false));
+document.getElementById('g-episode').addEventListener('input', updateEpNavCurrentLabel);
+document.getElementById('g-mtype').addEventListener('change', function() {
+  const isTv = this.value === 'tv';
+  document.getElementById('ep-strip').classList.toggle('visible', isTv);
+  if (!isTv) clearDetectResult();
+  updateEpNavVisibility();
+});
+
+async function updateEpNavVisibility() {
+  const mtype = document.getElementById('g-mtype').value;
+  const nav   = document.getElementById('epNav');
+  const hint  = document.getElementById('swipeHint');
+  currentMediaType = mtype;
+  if (mtype === 'tv') {
+    nav.style.display   = 'flex';
+    hint.style.display  = 'block';
+    await buildEpisodeNav(true);
+  } else {
+    nav.style.display   = 'none';
+    hint.style.display  = 'none';
+    document.getElementById('playerTitle').style.display = 'none';
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   URL PARAM AUTO-LOAD
+───────────────────────────────────────────────────────────────── */
+(function() {
+  const p  = new URLSearchParams(window.location.search);
+  const r  = p.get('r');
+  if (r) {
+    const mv = r.match(/^\/movie\/(\d+)/);
+    const tv = r.match(/^\/tv\/(\d+)\/(\d+)\/(\d+)/);
+    if (mv) {
+      document.getElementById('g-tmdb').value = mv[1];
+      fetchAll();
+    } else if (tv) {
+      document.getElementById('g-tmdb').value    = tv[1];
+      document.getElementById('g-mtype').value   = 'tv';
+      document.getElementById('ep-strip').classList.add('visible');
+      document.getElementById('g-season').value  = tv[2];
+      document.getElementById('g-episode').value = tv[3];
+      updateEpNavVisibility();
+      fetchAll();
+    }
+    return;
+  }
+  const tmdb = p.get('tmdb') || p.get('id');
+  if (tmdb) {
+    document.getElementById('g-tmdb').value = tmdb;
+    if (p.get('type') === 'tv') {
+      document.getElementById('g-mtype').value = 'tv';
+      document.getElementById('ep-strip').classList.add('visible');
+      if (p.get('season'))  document.getElementById('g-season').value  = p.get('season');
+      if (p.get('episode')) document.getElementById('g-episode').value = p.get('episode');
+      updateEpNavVisibility();
+    }
+    fetchAll();
+  }
+  setupMobileSheet();
+})();
+</script>
+</body>
+</html>
